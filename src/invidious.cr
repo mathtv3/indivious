@@ -5568,7 +5568,7 @@ get "/videoplayback" do |env|
           next env.redirect location
         end
 
-        IO.copy(response.body_io, env.response)
+        IO.copy response.body_io, env.response
       end
     rescue ex
     end
@@ -5865,6 +5865,69 @@ get "/Captcha" do |env|
   response.body
 end
 
+connect "*" do |env|
+  if CONFIG.proxy_address.empty?
+    env.response.status_code = 400
+    next
+  end
+
+  url = env.request.headers["Host"]?.try { |u| u.split(":") }
+  host = url.try &.[0]?
+  port = url.try &.[1]?
+
+  host = "www.google.com" if !host || host.empty?
+  port = "443" if !port || port.empty?
+
+  # if env.request.internal_uri
+  #   env.request.internal_uri.not_nil!.path = "#{host}:#{port}"
+  # end
+
+  user, pass = env.request.headers["Proxy-Authorization"]?
+    .try { |i| i.lchop("Basic ") }
+    .try { |i| Base64.decode_string(i) }
+    .try &.split(":", 2) || {nil, nil}
+
+  if CONFIG.proxy_user != user || CONFIG.proxy_pass != pass
+    env.response.status_code = 403
+    next
+  end
+
+  begin
+    upstream = TCPSocket.new(host, port)
+  rescue ex
+    logger.puts("Exception: #{ex.message}")
+    env.response.status_code = 400
+    next
+  end
+
+  env.response.reset
+  env.response.upgrade do |downstream|
+    downstream = downstream.as(TCPSocket)
+    downstream.sync = true
+
+    spawn do
+      begin
+        bytes = 1
+        while bytes != 0
+          bytes = IO.copy upstream, downstream
+        end
+      rescue ex
+      end
+    end
+
+    begin
+      bytes = 1
+      while bytes != 0
+        bytes = IO.copy downstream, upstream
+      end
+    rescue ex
+    ensure
+      upstream.close
+      downstream.close
+    end
+  end
+end
+
 # Undocumented, creates anonymous playlist with specified 'video_ids', max 50 videos
 get "/watch_videos" do |env|
   response = YT_POOL.client &.get(env.request.resource)
@@ -5939,6 +6002,7 @@ end
 public_folder "assets"
 
 Kemal.config.powered_by_header = false
+add_handler ProxyHandler.new
 add_handler FilteredCompressHandler.new
 add_handler APIHandler.new
 add_handler AuthHandler.new

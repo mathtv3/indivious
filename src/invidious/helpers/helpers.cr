@@ -263,6 +263,10 @@ struct Config
     admin_email:       {type: String, default: "omarroth@protonmail.com"},                                  # Email for bug reports
     cookies:           {type: HTTP::Cookies, default: HTTP::Cookies.new, converter: StringToCookies},       # Saved cookies in "name1=value1; name2=value2..." format
     captcha_key:       {type: String?, default: nil},                                                       # Key for Anti-Captcha
+    proxy_address:     {type: String, default: ""},
+    proxy_port:        {type: Int32, default: 8080},
+    proxy_user:        {type: String, default: ""},
+    proxy_pass:        {type: String, default: ""},
   })
 end
 
