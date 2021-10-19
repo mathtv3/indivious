@@ -53,6 +53,8 @@ module Invidious::Routes::Search
 
       user = env.get? "user"
 
+      user = user ? user.as(User) : nil
+
       begin
         search_query, videos, operators = process_search_query(query, page, user, region: region)
       rescue ex : ChannelSearchException
